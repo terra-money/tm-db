@@ -2,6 +2,7 @@ package db
 
 import (
 	"fmt"
+	"github.com/syndtr/goleveldb/leveldb/filter"
 	"path/filepath"
 
 	"github.com/syndtr/goleveldb/leveldb"
@@ -9,6 +10,8 @@ import (
 	"github.com/syndtr/goleveldb/leveldb/opt"
 	"github.com/syndtr/goleveldb/leveldb/util"
 )
+
+var DefaultOpenFilesCapacity = 32768
 
 func init() {
 	dbCreator := func(name string, dir string) (DB, error) {
@@ -24,7 +27,27 @@ type GoLevelDB struct {
 var _ DB = (*GoLevelDB)(nil)
 
 func NewGoLevelDB(name string, dir string) (*GoLevelDB, error) {
-	return NewGoLevelDBWithOpts(name, dir, nil)
+	o := &opt.Options{
+		// The default value is nil
+		Filter: filter.NewBloomFilter(10),
+		// Use 1 GiB instead of default 8 MiB
+		BlockCacheCapacity: opt.GiB,
+		// Use 64 MiB instead of default 4 MiB
+		WriteBuffer:            64 * opt.MiB,
+		DisableSeeksCompaction: true,
+		OpenFilesCacheCapacity: DefaultOpenFilesCapacity,
+		// Increase table size(ldb) and total size of by using follwing options
+		//             L1   L2    L3     L4      L5       L6
+		// TableSize    4    8    16     32      64      128
+		// TotalSize  200 2000 20000 200000 2000000 20000000
+		// TableSize of level = CompactionTableSize * (CompactionTableSizeMultiplier ^ Level)
+		CompactionTableSize:           2 * opt.MiB,
+		CompactionTableSizeMultiplier: 2.0,
+		// TotalSize of level = CompactionTotalSize * (CompactionTotalSizeMultiplier ^ Level)
+		CompactionTotalSize:           20 * opt.MiB,
+		CompactionTotalSizeMultiplier: 10.0,
+	}
+	return NewGoLevelDBWithOpts(name, dir, o)
 }
 
 func NewGoLevelDBWithOpts(name string, dir string, o *opt.Options) (*GoLevelDB, error) {
